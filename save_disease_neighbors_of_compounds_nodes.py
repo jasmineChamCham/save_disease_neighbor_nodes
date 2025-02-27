@@ -3,7 +3,7 @@ import json
 import pandas as pd 
 import ast
 from save_neo4j import save_df_neo4j 
-from get_unsaved_diseases import get_unsaved_diseases
+import re
 
 base_url = 'https://spoke.rbvi.ucsf.edu'
 
@@ -15,24 +15,16 @@ def get_spoke_api_resp(base_uri, end_point, params=None):
         return requests.get(uri)
 
 def get_context_using_spoke_api(node_value):
-    with open('./data/spoke_types.json', 'r') as file_spoke_types: # save the result from api /types
+    with open('./data/spoke_types.json', 'r') as file_spoke_types: 
         data_spoke_types = json.load(file_spoke_types)
     edge_types = list(data_spoke_types["edges"].keys())
     api_params = {
-        'node_filters' : ['Disease', 'Gene', 'Symptom'],
+        'node_filters' : ['Compound', 'SideEffect', 'Food', 'Reaction', 'PharmacologicClass'],
         'edge_filters': edge_types,
-        'cutoff_Compound_max_phase': 3 ,
-        'cutoff_Protein_source': ['SwissProt'],
-        'cutoff_DaG_diseases_sources': ['knowledge'],
-        'cutoff_DaG_textmining': 3,
-        'cutoff_CtD_phase': 3,
-        'cutoff_PiP_confidence': 0.7,
-        'cutoff_ACTeG_level': ['Low', 'Medium', 'High'],
-        'cutoff_DpL_average_prevalence': 0.001,
         'depth' : 1,
     }
     
-    nbr_end_point = "/api/v1/neighborhood/Disease/name/{}".format(node_value)
+    nbr_end_point = "/api/v1/neighborhood/Compound/name/{}".format(node_value)
     result = get_spoke_api_resp(base_url, nbr_end_point, params=api_params)
     node_context = result.json()
     
@@ -100,21 +92,23 @@ def get_context_using_spoke_api(node_value):
     df.loc[:, 'context_with_edge'] = df['source_type'] + " " + df['source_name'] + " " + df['predicate'].str.lower() + " " + df['target_type'] + " " + df['target_name'] + ' and Provenance of this association is ' + df['provenance'] + " and attributes associated with this association is in the following JSON format:\n " + df['evidence'].astype('str') + "\n\n"
     return df
 
-def get_diseases():
-    with open( "./data/disease_all.json", "r") as file:
-        diseases_info = json.load(file)
-    list_disease_names = [x['data']['properties']['name'] for x in diseases_info  if x['data']['properties'].get('name') != None]
-    return list_disease_names
+def get_compounds():
+    with open( "./data/set_compounds.txt", "r") as file:
+        list_compounds = file.readlines()
+    list_compounds = [c.replace('\n', '') for c in list_compounds]
+    return list_compounds
 
-list_disease_names = get_diseases() 
-for node_value in list_disease_names:
+list_compounds = get_compounds() 
+for node_value in list_compounds[536:]:
     print(f'node_value = {node_value}')
     df = get_context_using_spoke_api(node_value)
     if df.empty == False:
-        df.to_csv(f'./data/graph/genes_symptomps/graph_{node_value}.csv')
+        # df.to_csv(f'./data/graph/compound_sideeffect_food_reaction_pharmacologicclass/graph_{re.sub(r"[^\w\s]", "", node_value)}.csv')
         save_df_neo4j(df)
         print(f'Done {node_value}')
         with open('./data/process.txt', 'w') as f:
             f.write(node_value)
     else:
+        with open('./data/process.txt', 'w') as f:
+            f.write(node_value)
         print('df is empty!')

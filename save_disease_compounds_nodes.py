@@ -3,7 +3,6 @@ import json
 import pandas as pd 
 import ast
 from save_neo4j import save_df_neo4j 
-from get_unsaved_diseases import get_unsaved_diseases
 
 base_url = 'https://spoke.rbvi.ucsf.edu'
 
@@ -19,11 +18,9 @@ def get_context_using_spoke_api(node_value):
         data_spoke_types = json.load(file_spoke_types)
     edge_types = list(data_spoke_types["edges"].keys())
     api_params = {
-        'node_filters' : ['Disease', 'Gene', 'Symptom'],
+        'node_filters' : ['Compound'],
         'edge_filters': edge_types,
-        'cutoff_Compound_max_phase': 3 ,
         'cutoff_Protein_source': ['SwissProt'],
-        'cutoff_DaG_diseases_sources': ['knowledge'],
         'cutoff_DaG_textmining': 3,
         'cutoff_CtD_phase': 3,
         'cutoff_PiP_confidence': 0.7,
@@ -41,6 +38,12 @@ def get_context_using_spoke_api(node_value):
     
     nbr_nodes = []
     nbr_edges = []
+    
+    compounds = [node["data"]["properties"]["name"] for node in node_context if node["data"]["neo4j_type"]=='Compound']
+    if len(compounds)>0:
+        compounds = "\n".join(compounds) + "\n"
+        with open('./data/list_compounds.txt', 'a') as f:
+            f.write(compounds)
 
     for item in node_context:
         if "_" not in item["data"]["neo4j_type"]: # nodes
@@ -106,12 +109,14 @@ def get_diseases():
     list_disease_names = [x['data']['properties']['name'] for x in diseases_info  if x['data']['properties'].get('name') != None]
     return list_disease_names
 
-list_disease_names = get_diseases() 
-for node_value in list_disease_names:
+list_disease_names = get_diseases() # used to save the knowledge4
+index = list_disease_names.index('progressive familial intrahepatic cholestasis')
+print(f'idx={index}')
+for node_value in list_disease_names[index:]:
     print(f'node_value = {node_value}')
     df = get_context_using_spoke_api(node_value)
     if df.empty == False:
-        df.to_csv(f'./data/graph/genes_symptomps/graph_{node_value}.csv')
+        df.to_csv(f'./data/graph/compound/graph_{node_value}.csv')
         save_df_neo4j(df)
         print(f'Done {node_value}')
         with open('./data/process.txt', 'w') as f:
