@@ -22,25 +22,25 @@ def get_identifier(node_type, value):
         endpoint = "/api/v1/node/{}/{}/{}".format(node_type, attribute, value)
         result = get_spoke_api_resp(BASE_URI, endpoint)
         result = result.json()
-        identifier = result[0]["identifier"]
-        return identifier
+        return result[0]["identifier"],result[0]["node_type"]
     except Exception as e:
         value = value.replace('/', ' ')
         print('hehe')
         endpoint = "/api/v1/search/{}".format(value)
         result = get_spoke_api_resp(BASE_URI, endpoint)
         result = result.json()
-        identifier = result[0]["identifier"]
-        return identifier
+        for node in result:
+            if node['node_type'] == node_type:
+                return node["identifier"], node["node_type"]
 
-def update_identifier(tx, identifier, node_type, node_id):
+def update_identifier(tx, identifier, node_type, node_id, new_node_type):
     query = f"""
     MATCH (d:{node_type}) 
     WHERE d.id = $node_id AND d.identifier IS NULL
-    SET d.identifier = $identifier 
+    SET d.identifier = $identifier, d.node_type = $new_node_type
     RETURN d
     """
-    result = tx.run(query, node_id=node_id, identifier=identifier)
+    result = tx.run(query, node_id=node_id, identifier=identifier, new_node_type=new_node_type)
     
     return [dict(record["d"]) for record in result]
 
@@ -53,9 +53,9 @@ for neo4j_node in list_nodes:
     node_type = neo4j_node["type"]
     name = neo4j_node["name"]
 
-    identifier = get_identifier(node_type=node_type, value=name)
+    identifier, new_node_type = get_identifier(node_type=node_type, value=name)
     with driver.session() as session:
-        result = session.write_transaction(update_identifier, identifier, node_type, node_id )
+        result = session.write_transaction(update_identifier, identifier, node_type, node_id, new_node_type)
     print(json.dumps(result, indent=4))
     
 # Close the driver
